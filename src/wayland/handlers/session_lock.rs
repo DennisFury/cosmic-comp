@@ -32,6 +32,8 @@ impl SessionLockHandler for State {
 
         let ext_session_lock = locker.ext_session_lock().clone();
         locker.lock();
+        let dbus = self.common.dbus_state.clone();
+        self.common.input_capture.suspend_for_lock(&dbus);
         shell.session_lock = Some(SessionLock {
             ext_session_lock,
             surfaces: HashMap::new(),
@@ -45,6 +47,7 @@ impl SessionLockHandler for State {
     fn unlock(&mut self) {
         let mut shell = self.common.shell.write();
         shell.session_lock = None;
+        self.common.input_capture.resume_after_unlock();
 
         let seats = shell.seats.iter().cloned().collect::<Vec<_>>();
         for seat in &seats {
