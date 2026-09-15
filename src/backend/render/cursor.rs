@@ -463,6 +463,9 @@ pub struct CursorStateInner {
     image_cache: Vec<CachedFrame>,
 
     hidden: bool,
+    /// Hidden while an InputCapture session is diverting the pointer off-screen.
+    /// Orthogonal to idle-hide: pointer activity must not reveal this cursor.
+    hidden_for_input_capture: bool,
     idle_timer: Option<RegistrationToken>,
     last_armed: Option<Instant>,
 
@@ -695,6 +698,7 @@ impl Default for CursorStateInner {
             image_cache: Vec::new(),
 
             hidden: false,
+            hidden_for_input_capture: false,
             idle_timer: None,
             last_armed: None,
 
@@ -747,7 +751,7 @@ pub fn draw_cursor<R>(
     let mut state_ref = seat_userdata.get::<CursorState>().unwrap().lock().unwrap();
     let state = &mut *state_ref;
 
-    if state.hidden {
+    if state.hidden || state.hidden_for_input_capture {
         return;
     }
 
@@ -846,6 +850,9 @@ pub fn notify_cursor_activity(state: &State, seat: &Seat<State>) -> bool {
 
     let (was_hidden, old_token) = {
         let mut inner = cursor_state.lock().unwrap();
+        if inner.hidden_for_input_capture {
+            return true;
+        }
         let was_hidden = inner.hidden;
         inner.hidden = false;
 
@@ -897,6 +904,32 @@ fn hide_cursor(state: &mut State, seat: &Seat<State>) {
         inner.idle_timer = None;
         inner.last_armed = None;
     }
+    schedule_cursor_render(state);
+}
+
+/// Hide or reveal the hardware cursor for an active InputCapture session.
+///
+/// Unlike idle-hide, this is not cleared by pointer activity: captured motion
+/// and clicks must keep the local sprite invisible until capture ends.
+pub fn set_hidden_for_input_capture(state: &mut State, hidden: bool) {
+    let seats: Vec<_> = state.common.shell.read().seats.iter().cloned().collect();
+    let mut changed = false;
+    for seat in &seats {
+        let Some(cursor_state) = seat.user_data().get::<CursorState>() else {
+            continue;
+        };
+        let mut inner = cursor_state.lock().unwrap();
+        if inner.hidden_for_input_capture != hidden {
+            inner.hidden_for_input_capture = hidden;
+            changed = true;
+        }
+    }
+    if changed {
+        schedule_cursor_render(state);
+    }
+}
+
+fn schedule_cursor_render(state: &mut State) {
     let outputs: Vec<_> = state.common.shell.read().outputs().cloned().collect();
     for output in outputs {
         state.backend.schedule_render(&output);
