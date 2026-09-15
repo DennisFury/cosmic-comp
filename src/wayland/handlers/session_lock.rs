@@ -42,6 +42,8 @@ impl SessionLockHandler for State {
         for output in shell.outputs() {
             self.backend.schedule_render(output);
         }
+        drop(shell);
+        self.sync_input_capture_cursor_visibility();
     }
 
     fn unlock(&mut self) {
@@ -57,6 +59,8 @@ impl SessionLockHandler for State {
         for output in shell.outputs() {
             self.backend.schedule_render(output);
         }
+        drop(shell);
+        self.sync_input_capture_cursor_visibility();
     }
 
     fn new_surface(&mut self, lock_surface: LockSurface, wl_output: WlOutput) {

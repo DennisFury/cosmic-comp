@@ -375,6 +375,7 @@ impl State {
                             modifiers,
                         ) {
                             self.common.idle_notifier_state.notify_activity(&seat);
+                            self.sync_input_capture_cursor_visibility();
                             return;
                         }
                     }
@@ -856,7 +857,6 @@ impl State {
                     return;
                 };
                 self.common.idle_notifier_state.notify_activity(&seat);
-                notify_cursor_activity(self, &seat);
 
                 let button = event.button_code();
                 if matches!(&backend_id, InputBackendId::Normal)
@@ -867,6 +867,7 @@ impl State {
                 {
                     return;
                 }
+                notify_cursor_activity(self, &seat);
 
                 let current_focus = seat.get_keyboard().unwrap().current_focus();
                 let shortcuts_inhibited = current_focus.as_ref().is_some_and(|f| {

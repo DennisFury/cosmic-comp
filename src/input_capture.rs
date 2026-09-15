@@ -257,6 +257,12 @@ impl InputCaptureState {
             && self.keyboard.is_some()
     }
 
+    /// True while captured input is diverted off this seat. The hardware cursor
+    /// should stay hidden for the whole activation, not only idle-timeout.
+    pub(crate) fn hides_cursor(&self) -> bool {
+        self.active && !self.locked
+    }
+
     pub(crate) fn suspend_for_lock(&mut self, dbus: &DBusState) {
         self.locked = true;
         if self.active {
@@ -1155,6 +1161,7 @@ impl State {
                 reply,
             } => {
                 let result = self.common.input_capture.disable(&session_handle);
+                self.sync_input_capture_cursor_visibility();
                 let _ = reply.send(result);
             }
             Request::Release {
@@ -1186,11 +1193,13 @@ impl State {
                         pointer.set_location(smithay::utils::Point::from((x, y)));
                     }
                 }
+                self.sync_input_capture_cursor_visibility();
                 let _ = reply.send(result);
             }
             Request::Close { session_handle } => {
                 let dbus = self.common.dbus_state.clone();
                 self.common.input_capture.close(&dbus, &session_handle);
+                self.sync_input_capture_cursor_visibility();
             }
         }
     }
@@ -1199,6 +1208,14 @@ impl State {
         let regions = crate::libei::absolute_regions(self);
         let dbus = self.common.dbus_state.clone();
         self.common.input_capture.output_changed(&dbus, &regions);
+        self.sync_input_capture_cursor_visibility();
+    }
+
+    pub(crate) fn sync_input_capture_cursor_visibility(&mut self) {
+        crate::backend::render::cursor::set_hidden_for_input_capture(
+            self,
+            self.common.input_capture.hides_cursor(),
+        );
     }
 }
 
